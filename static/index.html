@@ -144,7 +144,7 @@ const METRICS = {
   ST:   { label: "Apparent power (ST)", path: "/getSTPredictions",   dataKey: "STPredictions",   thrKey: "STthreshold" },
   THDA: { label: "Current THD (THDA)",  path: "/getTHDAPredictions", dataKey: "THDAPredictions", thrKey: "THDAthreshold" },
 };
-const state = { metric: "PT", months: 1, data: null, threshold: null, requestId: 0 };
+const state = { metric: "ST", months: 1, data: null, threshold: null, requestId: 0 };
 // Allow deep links like /?metric=THDA&months=2
 const params = new URLSearchParams(location.search);
 if (METRICS[params.get("metric")]) state.metric = params.get("metric");
@@ -187,7 +187,10 @@ async function load() {
   document.getElementById("alarm-table").innerHTML = "";
   try {
     const res = await fetch(`${m.path}?months=${state.months}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const detail = await res.json().then(b => b.detail, () => null);
+      throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`);
+    }
     const body = await res.json();
     if (id !== state.requestId) return;
     state.data = body[m.dataKey].map(d => ({ t: parseDate(d.date), v: d.prediction, alarm: d.alarm }));
