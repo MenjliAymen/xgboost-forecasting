@@ -1,0 +1,7 @@
+import "timezone"option 
+location = timezone.fixed(offset: 0h)
+from(bucket: "Predictions")
+|> range(start: 2023-02-28T23:00:00.000Z, stop: 2024-02-27T23:00:00.000Z)
+|> filter(fn: (r) => r["_measurement"] == "620d2405d2a8e7e597a36c41")
+|> filter(fn: (r) => r["_field"] == "Pt")
+|> sort(columns: ["_time"], desc: false)

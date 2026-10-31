@@ -1,0 +1,17 @@
+# Environment
+venv/
+.venv/
+.env
+__pycache__/
+*.pyc
+.idea/
+
+# Trained models (rebuilt automatically on first request)
+*.pkl
+
+# Data dumps and experiment outputs (large; some exceed GitHub's 100 MB limit)
+*.csv
+plt1.png
+
+# Client/site description (kept in the private data repo)
+DATA/

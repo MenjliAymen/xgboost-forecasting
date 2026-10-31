@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Forecasts</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --border: #e2e1dc;
+    --grid: #ecebe7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --series-1: #2a78d6;
+    --critical: #d03b3b;
+    --good: #0ca30c;
+    --accent-bg: #e8f0fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #2e2e2b;
+      --grid: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #918f86;
+      --series-1: #3987e5;
+      --accent-bg: #1d2a3b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border: #2e2e2b;
+    --grid: #262624;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #918f86;
+    --series-1: #3987e5;
+    --accent-bg: #1d2a3b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  header p { margin: 0 0 20px; color: var(--text-secondary); font-size: 14px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary);
+    padding: 7px 14px; font: inherit; font-size: 14px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-bg); color: var(--text-primary); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+  .ctl-label { font-size: 13px; color: var(--text-muted); margin-right: 8px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .label { font-size: 13px; color: var(--text-secondary); }
+  .tile .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tile .sub { font-size: 12px; color: var(--text-muted); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 4px; }
+  .status .dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+  .card .caption { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
+  #chart { position: relative; width: 100%; height: 360px; }
+  #chart svg { display: block; width: 100%; height: 100%; }
+  .axis text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; display: none;
+  }
+  .tooltip .t-date { color: var(--text-muted); font-size: 12px; }
+  .tooltip .t-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .state { padding: 60px 16px; text-align: center; color: var(--text-secondary); }
+  .state.error { color: var(--critical); }
+
+  details summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .table-wrap { max-height: 320px; overflow: auto; }
+  .note { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+  @media (max-width: 480px) {
+    .ctl-label { display: block; margin-bottom: 4px; }
+    .seg button { padding: 7px 10px; }
+    .tile .value { font-size: 22px; }
+    #chart { height: 300px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Energy Forecasts</h1>
+    <p>XGBoost hourly forecasts of a metered device's electrical measurements, with alarm thresholds learned from history. Times are UTC.</p>
+  </header>
+
+  <div class="controls">
+    <div><span class="ctl-label">Metric</span><span class="seg" id="metric-seg" role="group" aria-label="Metric"></span></div>
+    <div><span class="ctl-label">Horizon</span><span class="seg" id="months-seg" role="group" aria-label="Forecast horizon"></span></div>
+  </div>
+
+  <section class="tiles" id="tiles" aria-live="polite"></section>
+
+  <section class="card">
+    <h2 id="chart-title">Forecast</h2>
+    <p class="caption" id="chart-caption"></p>
+    <div id="chart"><div class="state">Loading…</div></div>
+  </section>
+
+  <section class="card">
+    <details id="alarm-details">
+      <summary id="alarm-summary">Hours above threshold</summary>
+      <div id="alarm-table"></div>
+    </details>
+  </section>
+</main>
+
+<script>
+const METRICS = {
+  PT:   { label: "Active power (PT)",   path: "/getPTPredictions",   dataKey: "PTPredictions",   thrKey: "threshold" },
+  ST:   { label: "Apparent power (ST)", path: "/getSTPredictions",   dataKey: "STPredictions",   thrKey: "STthreshold" },
+  THDA: { label: "Current THD (THDA)",  path: "/getTHDAPredictions", dataKey: "THDAPredictions", thrKey: "THDAthreshold" },
+};
+const state = { metric: "PT", months: 1, data: null, threshold: null, requestId: 0 };
+// Allow deep links like /?metric=THDA&months=2
+const params = new URLSearchParams(location.search);
+if (METRICS[params.get("metric")]) state.metric = params.get("metric");
+if ([1, 2, 3, 4].includes(+params.get("months"))) state.months = +params.get("months");
+
+const fmt = v => v == null ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const parseDate = s => new Date(s.replace(" ", "T") + "Z");
+const dateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+
+function buildSeg(el, options, current, onPick) {
+  el.innerHTML = "";
+  for (const [value, text] of options) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = text;
+    b.setAttribute("aria-pressed", String(value === current));
+    b.onclick = () => onPick(value);
+    el.appendChild(b);
+  }
+}
+
+function renderControls() {
+  buildSeg(document.getElementById("metric-seg"),
+    Object.keys(METRICS).map(k => [k, k]), state.metric,
+    v => { state.metric = v; renderControls(); load(); });
+  buildSeg(document.getElementById("months-seg"),
+    [1, 2, 3, 4].map(n => [n, n === 1 ? "1 month" : `${n} months`]), state.months,
+    v => { state.months = v; renderControls(); load(); });
+}
+
+async function load() {
+  const id = ++state.requestId;
+  const m = METRICS[state.metric];
+  document.getElementById("chart-title").textContent = `${m.label}: forecast`;
+  document.getElementById("chart-caption").textContent = "";
+  document.getElementById("chart").innerHTML =
+    `<div class="state">Loading forecast… the first request for a metric trains its model, which can take several minutes.</div>`;
+  document.getElementById("tiles").innerHTML = "";
+  document.getElementById("alarm-table").innerHTML = "";
+  try {
+    const res = await fetch(`${m.path}?months=${state.months}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (id !== state.requestId) return;
+    state.data = body[m.dataKey].map(d => ({ t: parseDate(d.date), v: d.prediction, alarm: d.alarm }));
+    state.threshold = body[m.thrKey];
+    render();
+  } catch (err) {
+    if (id !== state.requestId) return;
+    const hint = state.metric === "PT" ? " PT reads live from InfluxDB at localhost:8086, so check that it is running and INFLUXDB_TOKEN is set." : "";
+    document.getElementById("chart").innerHTML =
+      `<div class="state error">Could not load the forecast (${err.message}).${hint}</div>`;
+  }
+}
+
+function render() {
+  const data = state.data, thr = state.threshold;
+  const alarms = data.filter(d => d.alarm);
+  const peak = data.reduce((a, d) => d.v > a.v ? d : a, data[0]);
+
+  const alarmStatus = thr == null
+    ? `<div class="status"><span>No threshold could be computed</span></div>`
+    : alarms.length
+      ? `<div class="status"><span class="dot" style="background:var(--critical)"></span><span>⚠ Alarms forecast</span></div>`
+      : `<div class="status"><span class="dot" style="background:var(--good)"></span><span>✓ No alarms</span></div>`;
+
+  document.getElementById("tiles").innerHTML = `
+    <div class="tile"><div class="label">Peak forecast</div><div class="value">${fmt(peak.v)}</div><div class="sub">${dateFmt.format(peak.t)}</div></div>
+    <div class="tile"><div class="label">Average forecast</div><div class="value">${fmt(data.reduce((s, d) => s + d.v, 0) / data.length)}</div><div class="sub">${data.length.toLocaleString()} hourly points</div></div>
+    <div class="tile"><div class="label">Alarm threshold</div><div class="value">${fmt(thr)}</div><div class="sub">From historical data</div></div>
+    <div class="tile"><div class="label">Hours above threshold</div><div class="value">${alarms.length.toLocaleString()}</div>${alarmStatus}</div>`;
+
+  document.getElementById("chart-caption").textContent =
+    `${dayFmt.format(data[0].t)} to ${dayFmt.format(data[data.length - 1].t)}. Red points are hours forecast above the alarm threshold.`;
+
+  renderChart();
+  renderAlarmTable(alarms);
+}
+
+function niceTicks(min, max, count) {
+  const span = max - min || 1;
+  const step0 = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= step0);
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function renderChart() {
+  const el = document.getElementById("chart");
+  const data = state.data, thr = state.threshold;
+  if (!data || !data.length) return;
+  const W = el.clientWidth, H = el.clientHeight;
+  const m = { top: 16, right: 16, bottom: 28, left: 48 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+
+  let lo = Math.min(...data.map(d => d.v)), hi = Math.max(...data.map(d => d.v));
+  if (thr != null) { lo = Math.min(lo, thr); hi = Math.max(hi, thr); }
+  const pad = (hi - lo) * 0.08 || 1;
+  lo -= pad; hi += pad;
+  const yTicks = niceTicks(lo, hi, 5);
+  lo = Math.min(lo, yTicks[0]); hi = Math.max(hi, yTicks[yTicks.length - 1]);
+
+  const t0 = data[0].t.getTime(), t1 = data[data.length - 1].t.getTime();
+  const x = t => m.left + ((t - t0) / (t1 - t0 || 1)) * iw;
+  const y = v => m.top + (1 - (v - lo) / (hi - lo)) * ih;
+
+  const dayMs = 86400000;
+  const days = (t1 - t0) / dayMs;
+  const stepDays = days <= 35 ? 7 : days <= 70 ? 14 : 28;
+  const xTicks = [];
+  const first = new Date(t0); first.setUTCHours(0, 0, 0, 0);
+  for (let t = first.getTime() + dayMs; t <= t1; t += stepDays * dayMs) xTicks.push(t);
+
+  const path = data.map((d, i) => `${i ? "L" : "M"}${x(d.t.getTime()).toFixed(1)},${y(d.v).toFixed(1)}`).join("");
+  const alarmDots = data.filter(d => d.alarm).map(d =>
+    `<circle cx="${x(d.t.getTime()).toFixed(1)}" cy="${y(d.v).toFixed(1)}" r="4" fill="var(--critical)" stroke="var(--surface-1)" stroke-width="2"/>`).join("");
+
+  let thrSvg = "";
+  if (thr != null) {
+    const ty = y(thr);
+    thrSvg = `<line x1="${m.left}" x2="${m.left + iw}" y1="${ty}" y2="${ty}" stroke="var(--text-secondary)" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="${m.left + iw}" y="${ty - 6}" text-anchor="end" fill="var(--text-secondary)" font-size="12">Alarm threshold ${fmt(thr)}</text>`;
+  }
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${METRICS[state.metric].label} hourly forecast line chart">
+      <g class="axis">
+        ${yTicks.map(v => `<line class="gridline" x1="${m.left}" x2="${m.left + iw}" y1="${y(v)}" y2="${y(v)}"/>
+          <text x="${m.left - 8}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`).join("")}
+        ${xTicks.map(t => `<text x="${x(t)}" y="${H - 8}" text-anchor="middle">${dayFmt.format(new Date(t))}</text>`).join("")}
+      </g>
+      ${thrSvg}
+      <path d="${path}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>
+      ${alarmDots}
+      <g id="hover" style="display:none">
+        <line id="hover-line" y1="${m.top}" y2="${m.top + ih}" stroke="var(--text-muted)" stroke-width="1"/>
+        <circle id="hover-dot" r="5" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>
+      </g>
+      <rect id="hit" x="${m.left}" y="${m.top}" width="${iw}" height="${ih}" fill="transparent"/>
+    </svg>
+    <div class="tooltip" id="tooltip"></div>`;
+
+  const hit = el.querySelector("#hit"), hover = el.querySelector("#hover"), tip = el.querySelector("#tooltip");
+  const svg = el.querySelector("svg");
+  const move = evt => {
+    const rect = svg.getBoundingClientRect();
+    const px = (evt.clientX - rect.left) * (W / rect.width);
+    const tt = t0 + ((px - m.left) / iw) * (t1 - t0);
+    let i = Math.round(((tt - t0) / (t1 - t0 || 1)) * (data.length - 1));
+    i = Math.max(0, Math.min(data.length - 1, i));
+    const d = data[i], cx = x(d.t.getTime()), cy = y(d.v);
+    hover.style.display = "";
+    el.querySelector("#hover-line").setAttribute("x1", cx);
+    el.querySelector("#hover-line").setAttribute("x2", cx);
+    const dot = el.querySelector("#hover-dot");
+    dot.setAttribute("cx", cx); dot.setAttribute("cy", cy);
+    dot.setAttribute("fill", d.alarm ? "var(--critical)" : "var(--series-1)");
+    tip.innerHTML = `<div class="t-date">${dateFmt.format(d.t)}</div><div class="t-val">${fmt(d.v)}</div>` +
+      (d.alarm ? `<div style="color:var(--critical)">⚠ Above threshold</div>` : "");
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, scale = rect.width / W;
+    let left = cx * scale + 12;
+    if (left + tw > rect.width) left = cx * scale - tw - 12;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${Math.max(0, cy * scale - 40)}px`;
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", () => { hover.style.display = "none"; tip.style.display = "none"; });
+}
+
+function renderAlarmTable(alarms) {
+  const LIMIT = 500;
+  document.getElementById("alarm-summary").textContent = `Hours above threshold (${alarms.length.toLocaleString()})`;
+  if (!alarms.length) {
+    document.getElementById("alarm-table").innerHTML = `<p class="note">No forecast hours exceed the threshold.</p>`;
+    return;
+  }
+  const rows = alarms.slice(0, LIMIT).map(d =>
+    `<tr><td>${dateFmt.format(d.t)}</td><td class="num">${fmt(d.v)}</td><td class="num">+${fmt(d.v - state.threshold)}</td></tr>`).join("");
+  document.getElementById("alarm-table").innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Time (UTC)</th><th class="num">Forecast</th><th class="num">Over threshold</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${alarms.length > LIMIT ? `<p class="note">Showing the first ${LIMIT} of ${alarms.length.toLocaleString()}.</p>` : ""}`;
+}
+
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderChart, 120); });
+
+renderControls();
+load();
+</script>
+</body>
+</html>
